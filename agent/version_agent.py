@@ -119,17 +119,21 @@ class Git:
         self.run("tag", "-a", name, "-m", message or name)
         return name
 
-    def push(self, tags=True, timeout=180):
-        # GIT_TERMINAL_PROMPT=0: an unattended push must fail fast rather than
-        # block forever waiting for a credential prompt that nobody can answer.
-        # The credential is cached by Git Credential Manager after one login; if
-        # it ever needs re-auth the snapshot stays local and the next run retries.
-        p = subprocess.run(
-            [self.bin, "-C", ROOT, "push", "-u", "origin", "main"] + (["--follow-tags"] if tags else []),
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=timeout,
-            env=dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_ASKPASS="echo", LC_ALL="C"),
-        )
+    def push(self, tags=True, timeout=120):
+        # GIT_TERMINAL_PROMPT=0 and no GIT_ASKPASS: an unattended push must fail
+        # fast instead of blocking on a credential prompt nobody can answer.
+        # (An earlier GIT_ASKPASS=echo made git loop on empty credentials and hang
+        # until the timeout.)
+        try:
+            p = subprocess.run(
+                [self.bin, "-C", ROOT, "push", "-u", "origin", "main"] + (["--follow-tags"] if tags else []),
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=timeout,
+                env=dict(os.environ, GIT_TERMINAL_PROMPT="0", LC_ALL="C"),
+            )
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "returncode": -1,
+                    "stdout": "", "stderr": f"push не ответил за {timeout}с - вероятно нет сети"}
         return {"ok": p.returncode == 0, "returncode": p.returncode,
                 "stdout": (p.stdout or "").strip()[-2000:],
                 "stderr": (p.stderr or "").strip()[-2000:]}
@@ -306,8 +310,12 @@ def cmd_snapshot(g, bump_kind="minor", message=None, push=False):
               "files_committed": len(st_before["dirty_files"]),
               "pushed": False}
     if push:
+        # The snapshot is already committed and tagged locally. A failed push is
+        # reported, never raised - the next scheduled run retries it.
         r = g.push()
-        result.update({"pushed": r["ok"], "push_output": r["stdout"] or r["stderr"]})
+        result.update({"pushed": r["ok"], "push_ok": r["ok"],
+                       "push_output": (r["stdout"] or r["stderr"])[:400]})
+        state.log_event("version_push", ok=r["ok"], detail=(r["stdout"] or r["stderr"])[:200])
     return result
 
 
