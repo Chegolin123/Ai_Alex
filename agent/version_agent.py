@@ -119,12 +119,16 @@ class Git:
         self.run("tag", "-a", name, "-m", message or name)
         return name
 
-    def push(self, tags=True, timeout=300):
+    def push(self, tags=True, timeout=180):
+        # GIT_TERMINAL_PROMPT=0: an unattended push must fail fast rather than
+        # block forever waiting for a credential prompt that nobody can answer.
+        # The credential is cached by Git Credential Manager after one login; if
+        # it ever needs re-auth the snapshot stays local and the next run retries.
         p = subprocess.run(
             [self.bin, "-C", ROOT, "push", "-u", "origin", "main"] + (["--follow-tags"] if tags else []),
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=timeout,
-            env=dict(os.environ, GIT_TERMINAL_PROMPT="1", LC_ALL="C"),
+            env=dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_ASKPASS="echo", LC_ALL="C"),
         )
         return {"ok": p.returncode == 0, "returncode": p.returncode,
                 "stdout": (p.stdout or "").strip()[-2000:],
