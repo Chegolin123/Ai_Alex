@@ -34,7 +34,7 @@ def load_skill(name):
 
 
 def ask_json(client, skill_name, prompt, max_tokens=1200, temperature=0.3, tools_enabled=False,
-             max_tool_rounds=4):
+             max_tool_rounds=4, show_thinking=False):
     """One model turn that must come back as JSON.
 
     Two measured constraints apply here:
@@ -43,6 +43,10 @@ def ask_json(client, skill_name, prompt, max_tokens=1200, temperature=0.3, tools
       - reasoning is switched off for these turns, because a reasoning model
         spends the whole max_tokens budget thinking and returns empty content
         with finish_reason=length
+
+    show_thinking streams the turn and re-enables reasoning so the operator can
+    watch it. It costs tokens, so it is off by default and never used for the
+    agentic phase, where the model has to spend its turn on tool calls.
     """
     system = load_skill(skill_name)
     messages = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]
@@ -52,6 +56,37 @@ def ask_json(client, skill_name, prompt, max_tokens=1200, temperature=0.3, tools
 
     t0 = time.time()
     schema = schemas.for_skill(skill_name)
+
+    if show_thinking:
+        kw = {"max_tokens": max(2400, max_tokens), "temperature": temperature}
+        if schema:
+            kw["json_schema"] = schema
+            kw["schema_name"] = skill_name
+        reasoning, answer = [], []
+        try:
+            for kind, delta in client.stream(messages, **kw):
+                (reasoning if kind == "reasoning" else answer).append(delta)
+                sys.stdout.write(delta)
+                sys.stdout.flush()
+        except llm.LlmError as e:
+            state.log_event("llm_error", skill=skill_name, stage="stream", error=str(e)[:300])
+            return None, {"error": str(e)}
+        print()
+        dt = round(time.time() - t0, 1)
+        raw_text = "".join(answer)
+        r_chars = sum(len(x) for x in reasoning)
+        parsed = llm.repair_json(raw_text)
+        if parsed is None:
+            state.log_event("json_parse_failed", skill=skill_name, stage="streamed",
+                            preview=raw_text[:300], reasoning_chars=r_chars)
+            return None, {"skill": skill_name, "seconds": dt, "parse_failed": True,
+                          "reasoning_chars": r_chars}
+        state.log_event("llm_ok", skill=skill_name, seconds=dt, streamed=True,
+                        reasoning_chars=r_chars, schema_enforced=bool(schema),
+                        temp_c=snap.get("temp_c"))
+        return parsed, {"skill": skill_name, "seconds": dt, "streamed": True,
+                        "reasoning_chars": r_chars, "schema_enforced": bool(schema),
+                        "temp_c": snap.get("temp_c"), "finish_reason": None}
 
     if not tools_enabled:
         kw = {"max_tokens": max_tokens, "temperature": temperature, "reasoning_effort": "none"}

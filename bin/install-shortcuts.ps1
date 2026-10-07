@@ -15,6 +15,8 @@ $items = @(
   @{ Name = 'Рабочий режим.cmd'; Script = 'work-mode.ps1'; Title = 'ALEX - Work Mode' }
   @{ Name = 'Игровой режим.cmd'; Script = 'game-mode.ps1'; Title = 'ALEX - Game Mode' }
   @{ Name = 'Самоулучшение.cmd'; Script = 'self-improve-now.ps1'; Title = 'ALEX - Self Improvement' }
+  @{ Name = 'Самоулучшение (размышления).cmd'; Script = 'self-improve-now.ps1';
+     Title = 'ALEX - Self Improvement (thinking)'; Args = '-Thinking' }
   @{ Name = 'Версия и отчёт.cmd'; Script = 'version-now.ps1'; Title = 'ALEX - Version Snapshot' }
 )
 
@@ -25,7 +27,7 @@ foreach ($d in $desktops) {
     $body = @(
       '@echo off'
       "title $($i.Title)"
-      "powershell -NoProfile -ExecutionPolicy Bypass -File `"$target`""
+      "powershell -NoProfile -ExecutionPolicy Bypass -File `"$target`" $($i.Args)"
       'timeout /t 3 >nul'
     )
     if (($body -join "`n") -match '[^\x00-\x7F]') {

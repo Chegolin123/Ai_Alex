@@ -1,7 +1,8 @@
-﻿param([int]$Changes = 1, [switch]$NoPause)
+﻿param([int]$Changes = 1, [switch]$Thinking, [switch]$NoPause)
 $ErrorActionPreference = 'Continue'
 
 # Ручной запуск цикла самоулучшения с видимым выводом.
+# -Thinking показывает размышления модели в реальном времени (стриминг).
 $root = 'C:\Users\finni\agent-system'
 $py = 'C:\Users\finni\AppData\Local\Programs\Python\Python312\python.exe'
 
@@ -17,6 +18,10 @@ Write-Host '  Цикл самоулучшения' -ForegroundColor Cyan
 Write-Host '  ------------------'
 Write-Host '  порядок: замер до -> поиск слабого места -> одна правка -> замер после'
 Write-Host '  нейтральные и ухудшившие изменения откатываются автоматически'
+if ($Thinking) {
+    Write-Host '  РЕЖИМ РАЗМЫШЛЕНИЙ: показываю, что модель думает вслух' -ForegroundColor Yellow
+    Write-Host '  (медленнее и дороже по токенам, для обычной работы выключено)' -ForegroundColor DarkGray
+}
 Write-Host ''
 
 if (-not (Test-Path $py)) { Write-Host "нет интерпретатора: $py" -ForegroundColor Red; exit 1 }
@@ -32,7 +37,10 @@ if (-not $llm) {
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'bin\start-runtime.ps1')
 }
 
-& $py (Join-Path $root 'agent\self_improve.py') $Changes
+$args = @((Join-Path $root 'agent\self_improve.py'), $Changes)
+if ($Thinking) { $args += '--thinking' }
+
+& $py @args
 $code = $LASTEXITCODE
 
 Write-Host ''

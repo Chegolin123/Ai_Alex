@@ -141,6 +141,70 @@ class Llm:
             self._schema_support = False
         return self._schema_support
 
+    def stream(self, messages, tools=None, max_tokens=1024, temperature=None,
+               json_schema=None, schema_name=None, reasoning_effort=None, timeout=None):
+        """Yield ('reasoning'|'content', delta) as the model produces it.
+
+        Used when the operator wants to watch the thinking instead of only the
+        verdict. Measured shape of this server's stream: deltas carry either
+        `reasoning_content` or `content`, never both at once.
+        """
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": self.temperature if temperature is None else temperature,
+            "stream": True,
+        }
+        if reasoning_effort:
+            payload["reasoning_effort"] = reasoning_effort
+        if json_schema:
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": schema_name or "response", "strict": True, "schema": json_schema},
+            }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+
+        req = urllib.request.Request(
+            self.base_url + "/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers=self._headers(),
+            method="POST",
+        )
+        self.calls += 1
+        try:
+            response = urllib.request.urlopen(req, timeout=timeout or self.timeout)
+        except urllib.error.HTTPError as e:
+            raise LlmError(f"HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:300]}") from e
+        except urllib.error.URLError as e:
+            raise LlmError(f"cannot reach {self.base_url} ({e.reason})") from e
+
+        finish = None
+        with response:
+            for raw in response:
+                line = raw.decode("utf-8", "replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                payload_text = line[5:].strip()
+                if payload_text == "[DONE]":
+                    break
+                try:
+                    obj = json.loads(payload_text)
+                except json.JSONDecodeError:
+                    continue
+                for choice in obj.get("choices") or []:
+                    if choice.get("finish_reason"):
+                        finish = choice["finish_reason"]
+                    delta = choice.get("delta") or {}
+                    r = delta.get("reasoning_content")
+                    if r:
+                        yield "reasoning", r
+                    c = delta.get("content")
+                    if c:
+                        yield "content", c
+
     def complete(self, messages, **kw):
         body = self.chat(messages, **kw)
         choice = body["choices"][0]

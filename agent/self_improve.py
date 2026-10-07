@@ -133,7 +133,7 @@ BENCHMARK_TASKS = [
 ]
 
 
-def propose(client, evidence, benchmark=None):
+def propose(client, evidence, benchmark=None, show_thinking=False):
     prompt = "\n".join([
         f"Цикл самоулучшения, {state.now()}",
         f"Счётчики событий: {json.dumps(evidence['event_counts'], ensure_ascii=False)}",
@@ -152,7 +152,8 @@ def propose(client, evidence, benchmark=None):
     ])
     # 4000 because a proposal carries the whole new file inside a JSON string;
     # at 900 the reply is cut off mid-file and the cycle reports no_proposal.
-    parsed, meta = loop.ask_json(client, "self_improve", prompt, max_tokens=4000)
+    parsed, meta = loop.ask_json(client, "self_improve", prompt, max_tokens=4000,
+                                 show_thinking=show_thinking)
     if not parsed:
         state.log_event("self_improve_no_proposal", reason="модель не вернула разбираемый JSON", meta=meta)
         return None
@@ -251,7 +252,7 @@ def apply_change(proposal, client):
     return True, {"component": component, "sub_agent": report, "tools": dispatched}
 
 
-def run_cycle(client=None, max_changes=1, verbose=True):
+def run_cycle(client=None, max_changes=1, verbose=True, show_thinking=False):
     client = client or llm.Llm()
     started = time.time()
     result = {"started": state.now(), "changes": [], "status": "unknown"}
@@ -275,7 +276,7 @@ def run_cycle(client=None, max_changes=1, verbose=True):
     state.log_event("self_improve_baseline", score=baseline_score, detail=baseline_detail)
 
     for _ in range(max_changes):
-        proposal = propose(client, evidence, benchmark=baseline_detail)
+        proposal = propose(client, evidence, benchmark=baseline_detail, show_thinking=show_thinking)
         if not proposal:
             result["status"] = "no_proposal"
             break
@@ -384,6 +385,15 @@ def run_cycle(client=None, max_changes=1, verbose=True):
 
 
 if __name__ == "__main__":
-    import sys
-    print(json.dumps(run_cycle(max_changes=int(sys.argv[1]) if len(sys.argv) > 1 else 1),
-                     ensure_ascii=False, indent=2))
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Цикл самоулучшения ALEX")
+    ap.add_argument("changes", nargs="?", type=int, default=1,
+                    help="сколько изменений за цикл (по умолчанию 1)")
+    ap.add_argument("--thinking", action="store_true",
+                    help="показать размышления модели в реальном времени")
+    ap.add_argument("--quiet", action="store_true", help="без подробного вывода")
+    args = ap.parse_args()
+
+    print(json.dumps(run_cycle(max_changes=args.changes, verbose=not args.quiet,
+                               show_thinking=args.thinking), ensure_ascii=False, indent=2))
