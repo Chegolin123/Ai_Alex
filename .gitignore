@@ -1,0 +1,25 @@
+# секреты - никогда не коммитить
+config.json
+config.local.json
+*.key
+*.pem
+.env
+
+# состояние, которое пересоздаётся
+state/backups/
+state/rag.db
+state/rag.db-shm
+state/rag.db-wal
+logs/
+*.tmp
+*.log
+
+# кэш
+__pycache__/
+*.pyc
+node_modules/
+
+# служебное
+state/_*.py
+state/_*.json
+state/_*.md

@@ -1,0 +1,44 @@
+{
+  "updated_at": "2026-10-07T10:19:51+00:00",
+  "window_minutes": 1440,
+  "counters": {
+    "cycles": 58,
+    "llm_ok": 173,
+    "llm_error": 0,
+    "json_parse_failed": 0,
+    "tool_call_unknown": 0,
+    "shell_exec": 40,
+    "shell_blocked_by_safety": 0
+  },
+  "task_metrics": {
+    "success_rate": 0.793,
+    "avg_attempts_per_stage": 1.5,
+    "stages_seen": 12,
+    "stage_retry_rate": 0.333,
+    "avg_time_per_cycle_sec": 12.2,
+    "avg_llm_turn_sec": 42.4,
+    "json_reliability": 1.0
+  },
+  "thermal_metrics": {
+    "avg_gpu_temp": 59.7,
+    "max_gpu_temp": 64.0,
+    "throttle_events": 0,
+    "thermal_rest_count": 0,
+    "current": {
+      "available": true,
+      "temp_c": 40.0,
+      "used_mb": 7890,
+      "total_mb": 8192,
+      "free_mb": 302,
+      "util_pct": 9.0,
+      "power_w": 12.22,
+      "status": "ok"
+    }
+  },
+  "rag": {
+    "chunks": 207,
+    "files": 36,
+    "db_bytes": 499712
+  },
+  "previous_updated_at": "2026-10-07T10:19:04+00:00"
+}

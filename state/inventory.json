@@ -1,0 +1,92 @@
+{
+  "collected_at": "2026-10-07",
+  "host": {
+    "computername": "ALEX",
+    "username": "finni",
+    "platform": "windows11",
+    "os_version": "Microsoft Windows NT 10.0.26200.0"
+  },
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 2070 SUPER",
+    "vram_total_mb": 8192,
+    "vram_used_mb_with_llm": 7898,
+    "vram_free_mb": 294,
+    "temp_c_idle": 53,
+    "temp_c_load": 64,
+    "driver": "591.86"
+  },
+  "llm_runtime": {
+    "server": "llama.cpp llama-server",
+    "binary": "D:\\llm\\llama.cpp\\llama-server.exe",
+    "model_path": "D:\\llm\\models\\Ornith-1.5-9B-Q4_K_M.gguf",
+    "quant": "Q4_K_M",
+    "size_gb": 5.77,
+    "alias": "Ornith-1.5-9B",
+    "endpoint": "http://127.0.0.1:8080/v1",
+    "context": 131072,
+    "kv_cache": "q8_0",
+    "full_offload": true,
+    "generation_tok_per_sec": 56,
+    "ollama": {
+      "installed": false,
+      "note": "Ollama в этой схеме не используется. Промпт раздела 2 неприменим."
+    }
+  },
+  "agent_system": {
+    "root": "C:\\Users\\finni\\agent-system",
+    "runtime": "python",
+    "python": "C:\\Users\\finni\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "benchmark_score": 1.0,
+    "benchmark_spread": 0.0,
+    "benchmark_tasks": ["write-json", "write-markdown"]
+  },
+  "hermes": {
+    "installed": true,
+    "exe": "C:\\Users\\finni\\AppData\\Local\\hermes\\bin\\hermes.exe",
+    "commit": "ee320cb6c1",
+    "version": "0.21.5+8488.gee320cb",
+    "python": "3.14.7",
+    "cli_works": true,
+    "verified": "hermes -z -> exit 0, ответ от локальной модели за 41 с",
+    "root_cause_of_earlier_failure": "не очистка папок, а права: инсталлятор запускался с повышением прав, тулчейн остался читаемым только для админов, обычный пользователь видел пустые папки, hermes.exe падал с кодом 1",
+    "fix": "bin\\fix-hermes-acl.ps1 - ReadAndExecute для пользователя на tools и bin (рекурсивно)",
+    "config": "C:\\Users\\finni\\AppData\\Local\\hermes\\config.yaml",
+    "approvals": {
+      "mode": "off",
+      "cron_mode": "approve",
+      "single_query_mode": "approve",
+      "unattended_mode": "approve",
+      "protected_instruction_files": false
+    }
+  },
+  "tools_available": {
+    "python": true,
+    "pip": true,
+    "curl.exe": true,
+    "winget": true,
+    "git": "только внутри тулчейна Hermes (пустой)",
+    "node": "только внутри тулчейна Hermes (пустой)",
+    "docker": false,
+    "rg": "только внутри тулчейна Hermes (пустой)",
+    "jq": false,
+    "uv": "только внутри тулчейна Hermes (пустой)",
+    "nssm": false
+  },
+  "scheduled_tasks": {
+    "agent-improve-hourly": "не зарегистрирована (нужен UAC)",
+    "agent-runtime-startup": "не зарегистрирована (нужен UAC)",
+    "agent-metrics-daily": "не зарегистрирована (нужен UAC)",
+    "register_command": "powershell -ExecutionPolicy Bypass -File C:\\Users\\finni\\agent-system\\bin\\register-autostart.ps1 -Mode enable"
+  },
+  "desktop_shortcuts": {
+    "Рабочий режим.cmd": "C:\\Users\\finni\\OneDrive\\Desktop",
+    "Игровой режим.cmd": "C:\\Users\\finni\\OneDrive\\Desktop",
+    "public_desktop": "требует админа, не создан"
+  },
+  "rag": {
+    "engine": "sqlite fts5",
+    "db": "C:\\Users\\finni\\agent-system\\state\\rag.db",
+    "files": 25,
+    "chunks": 155
+  }
+}

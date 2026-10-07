@@ -1,0 +1,55 @@
+{
+  "checked_at": "2026-10-06T23:30:00+00:00",
+  "base_url": "http://127.0.0.1:8080/v1",
+  "model": "Ornith-1.5-9B",
+  "models": {
+    "id": "Ornith-1.5-9B",
+    "n_ctx": 131072,
+    "n_ctx_train": 262144,
+    "n_params": 9197093888,
+    "ftype": "Q4_K - Medium",
+    "size_gb": 5.77
+  },
+  "reasoning": {
+    "mode": "active",
+    "transport": "reasoning_content field (not inline <think>)",
+    "note": "<think> не используется этой сборкой чат-шаблона. Проверять наличие reasoning_content, а не тега.",
+    "disabled_for_structured_turns": true,
+    "why_disabled": "reasoning съедает весь max_tokens и возвращает пустой контент с finish_reason=length"
+  },
+  "tool_calling": {
+    "mode": "native",
+    "note": "tool_calls в API, текстовый [Tool Call] не используется. Fallback-парсер оставлен в runtime/llm.py."
+  },
+  "json_only": {
+    "reliable_without_constraint": false,
+    "failure_mode": "валидный JSON + посторонний текст -> json.loads падает с 'Extra data'",
+    "with_json_schema_constraint": true,
+    "constraint_mechanism": "response_format: {type: json_schema, json_schema: {...}} как грамматика llama.cpp"
+  },
+  "runtime_decision": {
+    "tool_call_mode": "native",
+    "reasoning_mode": "active",
+    "json_enforcement": "json_schema",
+    "json_repair_fallback": true,
+    "shell": "PowerShell, не cmd.exe"
+  },
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 2070 SUPER",
+    "vram_total_mb": 8192,
+    "vram_used_mb_with_server": 7898,
+    "vram_free_mb": 294,
+    "kv_cache_type": "q8_0",
+    "fit": "модель целиком в VRAM, spill на CPU нет",
+    "generation_tok_per_sec": 56,
+    "prefill_tok_per_sec": 1140,
+    "context_131072_fits": true,
+    "context_262144_fits": false
+  },
+  "unverified_claims": [
+    "SWE-bench Verified 70.6% - не проверено, нет доступа к источнику",
+    "GPQA Diamond 86.4% - не проверено",
+    "база Qwen3.5 + Gemma-4 - не проверено",
+    "лицензия MIT - не проверено"
+  ]
+}
