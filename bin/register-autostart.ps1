@@ -14,8 +14,12 @@ $tasks = @(
   @{
     Name     = 'agent-improve-hourly'
     Action   = "`"$py`" `"$root\agent\self_improve.py`" 1 >> `"$logDir\improve-hourly.log`" 2>&1"
-    Trigger  = (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) `
-                -RepetitionInterval (New-TimeSpan -Hours 1))
+    # RepetitionInterval без RepetitionDuration не работает: Windows считает такой
+    # триггер однократным и задача срабатывает ровно один раз. Длительность в
+    # 10 лет даёт реальный hourly до 2036 года.
+    Trigger  = (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(3) `
+                -RepetitionInterval (New-TimeSpan -Hours 1) `
+                -RepetitionDuration (New-TimeSpan -Days 3650))
     RunLevel = 'Limited'
     Desc     = 'Ежечасный цикл самоулучшения агентной системы'
   }
@@ -32,6 +36,15 @@ $tasks = @(
     Trigger  = (New-ScheduledTaskTrigger -Daily -At '11:00')
     RunLevel = 'Limited'
     Desc     = 'Сбор метрик и переиндексация RAG раз в сутки'
+  }
+  @{
+    Name     = 'agent-version-daily'
+    Action   = "`"$py`" `"$root\agent\version_agent.py`" snapshot --bump patch --push >> `"$logDir\version-daily.log`" 2>&1"
+    # Повторение задаётся явно вместе с длительностью: без -RepetitionDuration
+    # Windows не считает триггер повторяющимся и задача срабатывает один раз.
+    Trigger  = (New-ScheduledTaskTrigger -Daily -At '23:30')
+    RunLevel = 'Limited'
+    Desc     = 'Ежедневный снимок версии с отчётом и отправкой в GitHub'
   }
 )
 

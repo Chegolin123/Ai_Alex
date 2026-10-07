@@ -293,9 +293,9 @@ def cmd_snapshot(g, bump_kind="minor", message=None, push=False):
         f.write(build_report(g, st, m, improvements, v, tag))
 
     update_changelog(tag, msg, st, v)
+    save_version(v)
     g.commit(f"отчёт и changelog: {tag}")
     g.tag(tag, msg)
-    save_version(v)
 
     result = {"tag": tag, "report": os.path.relpath(report_path, ROOT),
               "head": head or g.out("rev-parse", "--short", "HEAD"),

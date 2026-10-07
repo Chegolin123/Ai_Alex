@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-07T10:19:51+00:00",
+  "updated_at": "2026-10-07T10:44:41+00:00",
   "window_minutes": 1440,
   "counters": {
     "cycles": 58,
@@ -27,18 +27,18 @@
     "current": {
       "available": true,
       "temp_c": 40.0,
-      "used_mb": 7890,
+      "used_mb": 7820,
       "total_mb": 8192,
-      "free_mb": 302,
-      "util_pct": 9.0,
-      "power_w": 12.22,
+      "free_mb": 372,
+      "util_pct": 13.0,
+      "power_w": 12.49,
       "status": "ok"
     }
   },
   "rag": {
-    "chunks": 207,
-    "files": 36,
+    "chunks": 211,
+    "files": 38,
     "db_bytes": 499712
   },
-  "previous_updated_at": "2026-10-07T10:19:04+00:00"
+  "previous_updated_at": "2026-10-07T10:19:51+00:00"
 }
