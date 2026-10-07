@@ -242,6 +242,66 @@ def cmd_status_live(a):
     return 0
 
 
+def cmd_ask(a):
+    """Park a question for the human. Autonomous agents use this when they hit a
+    decision they must not make on their own."""
+    from agent import questions
+    res = questions.ask(
+        a.question,
+        source=a.source,
+        context=a.context or "",
+        options=a.option or [],
+        priority=a.priority,
+    )
+    if a.json:
+        return emit(res)
+    if not res.get("created"):
+        OUT.write(f"уже открыт: {res.get('id')}\n")
+        return 0
+    OUT.write(f"{res['id']}  [{res['source']}] {res['question']}\n")
+    if res.get("options"):
+        OUT.write("  варианты: " + " | ".join(res["options"]) + "\n")
+    return 0
+
+
+def cmd_questions(a):
+    from agent import questions
+    rows = questions.listing(status=a.status, limit=a.limit)
+    c = questions.counts()
+    if a.json:
+        return emit({"counts": c, "questions": rows})
+    OUT.write(f"вопросов: всего {c['total']}, открыто {c['open']}, "
+              f"отвечено {c['answered']}, отклонено {c['dismissed']}\n")
+    if not rows:
+        OUT.write("открытых вопросов нет\n")
+        return 0
+    for r in rows:
+        mark = {"open": "?", "answered": "+", "dismissed": "-"}.get(r.get("status"), "?")
+        prio = "!!" if r.get("priority") == "high" else "  "
+        OUT.write(f"\n{mark}{prio} {r['id']}  [{r.get('source')}]  {r.get('ts','')[:16]}\n")
+        OUT.write(f"   {r.get('question')}\n")
+        if r.get("options"):
+            OUT.write("   варианты: " + " | ".join(r["options"]) + "\n")
+        if r.get("context"):
+            OUT.write(f"   контекст: {r['context'][:220]}\n")
+        if r.get("status") == "open":
+            OUT.write(f"   ответить: alex.cmd answer {r['id']} \"твой ответ\"\n")
+        else:
+            OUT.write(f"   ответ ({r.get('answered_by','?')}): {(r.get('answer') or '')[:200]}\n")
+    return 0
+
+
+def cmd_answer(a):
+    from agent import questions
+    res = questions.answer(a.qid, a.text)
+    return emit(res)
+
+
+def cmd_dismiss(a):
+    from agent import questions
+    return emit(questions.dismiss(a.qid, a.why or ""))
+
+
 def cmd_progress(a):
     """Honest answer to "is it actually getting better on its own"."""
     from agent import progress
@@ -326,6 +386,31 @@ def main():
     p = sub.add_parser("progress", help="улучшает ли система сама себя: честный вердикт")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_progress)
+
+    p = sub.add_parser("ask", help="поставить вопрос человеку (очередь вопросов)")
+    p.add_argument("question")
+    p.add_argument("--source", default="self-improvement")
+    p.add_argument("--context", default="")
+    p.add_argument("--option", action="append", help="вариант ответа, можно повторять")
+    p.add_argument("--priority", choices=["low", "normal", "high"], default="normal")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_ask)
+
+    p = sub.add_parser("questions", help="очередь вопросов от агентов")
+    p.add_argument("--status", choices=["open", "answered", "dismissed"])
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_questions)
+
+    p = sub.add_parser("answer", help="ответить на вопрос")
+    p.add_argument("qid")
+    p.add_argument("text")
+    p.set_defaults(fn=cmd_answer)
+
+    p = sub.add_parser("dismiss", help="закрыть вопрос без ответа")
+    p.add_argument("qid")
+    p.add_argument("why", nargs="?", default="")
+    p.set_defaults(fn=cmd_dismiss)
 
     a = ap.parse_args()
     try:

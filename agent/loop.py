@@ -197,6 +197,16 @@ def _finish(res, skill_name, snap, waited, max_tokens, schema_enforced):
     """Turn one model reply into (parsed, meta), logging honestly."""
     parsed = llm.repair_json(res["content"])
     dt = round(res.get("seconds") or 0, 1)
+    # repair_json returns whatever shape the model emitted, including a bare JSON
+    # array. Every caller then does parsed.get(...), so a list reply crashed the
+    # cycle with "AttributeError: 'list' object has no attribute 'get'" - seen
+    # intermittently in the benchmark. A declared schema is an object schema.
+    wrong_shape = parsed is not None and not isinstance(parsed, dict)
+    if wrong_shape:
+        state.log_event("json_wrong_shape", skill=skill_name,
+                        got=type(parsed).__name__,
+                        preview=(res.get("content") or "")[:200])
+        parsed = None
     meta = {
         "skill": skill_name,
         "seconds": dt,

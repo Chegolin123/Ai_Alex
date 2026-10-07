@@ -12,6 +12,7 @@ $desktops = @(
 # in it corrupts the following line and turns `echo` into `ho`. That is why the
 # titles below are ASCII even though the shortcut names are not.
 $items = @(
+  @{ Name = 'Посредник.cmd'; Script = 'open-mediator.ps1'; Title = 'ALEX - Mediator' }
   @{ Name = 'Hermes Agent.cmd'; Script = 'open-hermes.ps1'; Title = 'Hermes Agent' }
   @{ Name = 'Рабочий режим.cmd'; Script = 'work-mode.ps1'; Title = 'ALEX - Work Mode' }
   @{ Name = 'Игровой режим.cmd'; Script = 'game-mode.ps1'; Title = 'ALEX - Game Mode' }

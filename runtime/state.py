@@ -120,18 +120,38 @@ def merge_metrics(patch):
 
 
 def backup(path):
+    """Copy a file into state/backups with its RELATIVE path preserved.
+
+    The relative path is what makes restore work: the old naming kept only the
+    basename, so restoring runtime/llm.py looked for <root>/llm.py, found
+    nothing and returned False - a silent no-op that made every rollback of a
+    file in a subdirectory a lie in the ledger.
+    """
     ensure_dirs()
     if not os.path.exists(path):
         return None
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    name = f"{stamp}__{os.path.basename(path)}"
-    dest = os.path.join(BACKUP_DIR, name)
+    rel = os.path.relpath(path, ROOT).replace(os.sep, "/")
+    if rel.startswith(".."):
+        return None
+    flat = rel.replace("/", "%")
+    dest = os.path.join(BACKUP_DIR, f"{stamp}__{flat}")
+    counter = 1
+    while os.path.exists(dest):
+        dest = os.path.join(BACKUP_DIR, f"{stamp}__{flat}.{counter}")
+        counter += 1
     shutil.copy2(path, dest)
     return dest
 
 
 def restore(backup_path):
-    original = os.path.join(ROOT, backup_path.split("__", 1)[1])
+    """Put a backup back where it came from. Returns the restored path."""
+    if not os.path.exists(backup_path):
+        return False
+    tail = os.path.basename(backup_path).split("__", 1)[-1]
+    flat = tail.split(".")[0] if tail.count("%") == 0 else tail
+    rel = flat.replace("%", os.sep)
+    original = os.path.join(ROOT, rel)
     if not os.path.exists(original):
         return False
     shutil.copy2(backup_path, original)

@@ -8,6 +8,7 @@ outcome is written to improvements.jsonl regardless of result.
 
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -15,6 +16,7 @@ import time
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from agent import loop, tools
+from agent import questions as backlog
 from rag import index as rag
 from runtime import llm, state, thermal
 
@@ -214,11 +216,13 @@ def validate_component(component):
 def apply_change(proposal, client):
     """Apply the proposed change. Returns (ok, info).
 
-    Measured rationale for delegating the edit instead of inlining a whole file in
-    the JSON answer: the model could not reliably emit a complete file inside a
-    JSON string, so proposals arrived as prose and either got rejected or, in the
-    very first run, overwrote runtime/llm.py with a sentence. Execution through
-    the sub-agent's file_write is the path already measured to work.
+    Measured reason the edit no longer goes through the model's tool calling: the
+    sub-agent kept exploring - file_read, file_read, shell_exec, shell_exec - and
+    never called file_write, so every autonomous cycle died with "sub-agent made
+    no successful file_write". The same two-turn shape that fixed the reasoning
+    problem applies here: read the file in code, let the model return only the new
+    text with no tools available, then write it here. The unreliable step is
+    removed rather than prompted more firmly.
     """
     component = proposal["component"].replace("\\", "/").strip()
     if component not in KNOWN_COMPONENTS:
@@ -229,27 +233,145 @@ def apply_change(proposal, client):
         result = tools.file_write(component, inline)
         return bool(result.get("ok")), result
 
+    path = os.path.join(STATE_ROOT, component)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            original = f.read()
+    except OSError as e:
+        return False, {"error": f"не читается {component}: {e}"}
+
     instruction = (
-        f"Внеси ровно одну правку в файл {component}.\n\n"
+        f"Ниже ПОЛНОЕ текущее содержимое файла {component}.\n"
+        f"Верни ПОЛНОЕ новое содержимое этого же файла с одной правкой.\n\n"
         f"Что исправляем: {proposal['weakness']}\n"
         f"Инструкция: {proposal['change_instruction']}\n"
-        f"Почему: {proposal['reason']}\n"
         f"Ожидаемый эффект: {proposal.get('expected_effect', '')}\n\n"
-        f"Обязательный порядок: сначала file_read {component}, затем file_write {component} "
-        f"с ПОЛНЫМ новым содержимым файла. Не сокращай и не пиши «...» вместо кода. "
-        f"Меняй только то, что относится к инструкции; остальное сохрани как есть."
+        f"Правила: внеси только эту правку, остальное сохрани дословно. "
+        f"Не сокращай, не пиши «...» вместо кода, не добавляй пояснений. "
+        f"Верни только текст файла.\n\n"
+        f"===== НАЧАЛО ФАЙЛА =====\n{original}\n===== КОНЕЦ ФАЙЛА ====="
     )
-    report, meta = loop.ask_json(client, "sub_agent", instruction, max_tokens=1400, tools_enabled=True)
-    dispatched = [r.get("name") for r in (meta.get("tool_results") or [])]
-    wrote = [
-        r for r in (meta.get("tool_results") or [])
-        if r.get("name") == "file_write" and (r.get("result") or {}).get("ok")
+
+    messages = [
+        {"role": "system", "content":
+            "Ты редактор файлов. Возвращаешь полное новое содержимое файла "
+            "и ничего больше: без пояснений, без markdown-обёрток, без нумерации строк."},
+        {"role": "user", "content": instruction},
     ]
-    if not wrote:
+
+    # Reasoning off, no tools: the model has one job and nothing to explore.
+    # Budget has to fit the WHOLE file plus slack. Measured failure: at 4000
+    # tokens the reply was cut at 54% of runtime/llm.py, which sailed past the old
+    # "half the original length" check and produced an unimportable module.
+    budget = max(8000, int(len(original) * 0.9))
+    try:
+        res = client.complete(
+            messages,
+            max_tokens=budget,
+            temperature=0.2,
+            reasoning_effort="none",
+        )
+    except llm.LlmError as e:
         state.log_event("self_improve_rejected_proposal", component=component,
-                        reason="субагент не выполнил file_write", tools=dispatched)
-        return False, {"error": f"sub-agent made no successful file_write (tools: {dispatched})"}
-    return True, {"component": component, "sub_agent": report, "tools": dispatched}
+                        reason=f"ошибка правки: {str(e)[:120]}")
+        return False, {"error": f"ошибка правки: {str(e)[:200]}"}
+
+    new_text = _clean_editor_output(res.get("content") or "")
+    if not new_text.strip():
+        state.log_event("self_improve_rejected_proposal", component=component,
+                        reason="модель вернула пустой текст файла")
+        return False, {"error": "модель вернула пустой текст файла"}
+
+    # An edit must keep the file recognisable. Truncation is the failure mode that
+    # actually happened, and it is silent, so it needs a hard ratio, not a loose one.
+    before_len = len(original)
+    before_lines = original.count("\n")
+    after_len = len(new_text)
+    after_lines = new_text.count("\n")
+    if after_len < before_len * 0.85:
+        state.log_event("self_improve_rejected_proposal", component=component,
+                        reason=f"ответ похож на обрезанный: {after_len} против {before_len} символов")
+        return False, {"error": f"ответ обрезан: {after_len} символов против {before_len} в оригинале"}
+    if after_lines < before_lines * 0.7:
+        state.log_event("self_improve_rejected_proposal", component=component,
+                        reason=f"потеряны строки: {after_lines} против {before_lines}")
+        return False, {"error": f"потеряны строки: {after_lines} против {before_lines}"}
+
+    result = tools.file_write(component, new_text)
+    ok = bool(result.get("ok"))
+    state.log_event("self_improve_change_applied", component=component, ok=ok,
+                    chars_before=before_len, chars_after=after_len,
+                    lines_before=before_lines, lines_after=after_lines)
+    return ok, result
+
+
+def _clean_editor_output(text):
+    """Strip markdown fences and any prose around the file body.
+
+    The model wraps the rewritten file in a code fence. The old version looked
+    for the fence regex on the wrong module (loop._FENCE, which does not exist -
+    it lives in runtime.llm), so the fence was never stripped and the trailing
+    ``` landed inside the written file, making it unparseable every single run.
+    """
+    s = text.strip()
+
+    if s.startswith("```"):
+        s = re.sub(r"^```[ \t]*[\w+-]*[ \t]*\r?\n?", "", s, count=1)
+        s = re.sub(r"\r?\n?```[ \t]*$", "", s, count=1)
+
+    start_marker = "===== НАЧАЛО ФАЙЛА ====="
+    if start_marker in s:
+        s = s.split(start_marker, 1)[1]
+    end_marker = "===== КОНЕЦ ФАЙЛА ====="
+    if end_marker in s:
+        s = s.split(end_marker, 1)[0]
+
+    s = s.strip()
+
+    if "```" in s and s.count("```") == 2:
+        head, _, rest = s.partition("```")
+        if not head.strip():
+            s = rest.rsplit("```", 1)[0]
+
+    return s.strip() + "\n"
+
+
+def _park_raw(question, context="", priority="normal", options=None):
+    try:
+        res = backlog.ask(question, source="self-improvement", context=context,
+                          options=options or [], priority=priority)
+        loop.note("вопрос человеку: %s (%s)" % (question[:80], res.get("id")))
+        return res
+    except Exception as e:
+        state.log_event("question_park_failed", error=str(e)[:200])
+        return None
+
+
+def _park_question(proposal, error):
+    """A proposal the executor could not carry out is usually a decision a human
+    has to make, so it becomes a question instead of a silent dead end."""
+    try:
+        opts = []
+        options = proposal.get("options")
+        if isinstance(options, list):
+            opts = [str(o) for o in options][:4]
+        if not opts:
+            opts = [
+                "разрешить правку этого компонента",
+                "запретить правку этого компонента",
+                "перенести правку на другой файл",
+            ]
+        return _park_raw(
+            "Меняем %s, но применить правку не вышло: %s. Разрешаешь?" % (
+                proposal.get("component"), error[:160]),
+            context="Дефект: %s\nИнструкция: %s" % (
+                (proposal.get("weakness") or "")[:400],
+                (proposal.get("change_instruction") or "")[:400]),
+            priority="high",
+            options=opts,
+        )
+    except Exception:
+        return None
 
 
 def run_cycle(client=None, max_changes=1, verbose=True, show_thinking=False):
@@ -281,6 +403,15 @@ def run_cycle(client=None, max_changes=1, verbose=True, show_thinking=False):
         proposal = propose(client, evidence, benchmark=baseline_detail, show_thinking=show_thinking)
         if not proposal:
             result["status"] = "no_proposal"
+            _park_raw(
+                "Не удалось определить слабое место автоматически: модель не смогла "
+                "разобрать журнал и назвать конкретный дефект. Нужен взгляд человека: "
+                "что в системе сейчас выглядит неправильным?",
+                context="Счётчики: %s. Бенчмарк: %s" % (
+                    json.dumps(evidence["event_counts"], ensure_ascii=False)[:400],
+                    json.dumps(baseline_detail.get("runs") if isinstance(baseline_detail, dict) else None,
+                               ensure_ascii=False)),
+            )
             break
 
         component = proposal["component"]
@@ -307,6 +438,7 @@ def run_cycle(client=None, max_changes=1, verbose=True, show_thinking=False):
             )
             result["rejected"] = result.get("rejected", 0) + 1
             loop.note("предложение отклонено на стадии правки: %s" % str(info.get("error"))[:120])
+            _park_question(proposal, str(info.get("error")))
             if verbose:
                 print(f"ОТКЛОНЕНО: {info.get('error')}")
             continue
@@ -326,8 +458,19 @@ def run_cycle(client=None, max_changes=1, verbose=True, show_thinking=False):
                 invalid_reason=why,
                 restored=bool(restored),
             )
+            if not restored:
+                # rollback itself failed - this is the dangerous case, because the
+                # tree may be left holding a change that does not compile
+                _park_raw(
+                    "Правка %s сделала файл нерабочим и НЕ была откатана: %s. "
+                    "Нужен человек." % (component, why[:160]),
+                    context="Инструкция: %s" % (proposal.get("change_instruction") or "")[:400],
+                    priority="high",
+                    options=["откатить вручную", "починить самому", "оставить как есть"],
+                )
             if verbose:
-                print(f"НЕВАЛИДНАЯ ПРАВКА ({why}) - откачено")
+                print(f"НЕВАЛИДНАЯ ПРАВКА ({why}) - откачено"
+                      f"{'' if restored else ', ОТКАТ НЕ УДАЛСЯ'}")
             continue
 
         after_score, after_detail = measure(client)
