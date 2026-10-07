@@ -1,6 +1,6 @@
 {
   "major": 0,
   "minor": 4,
-  "patch": 0,
-  "bump": "minor"
+  "patch": 1,
+  "bump": "patch"
 }
