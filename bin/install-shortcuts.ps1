@@ -12,6 +12,7 @@ $desktops = @(
 # in it corrupts the following line and turns `echo` into `ho`. That is why the
 # titles below are ASCII even though the shortcut names are not.
 $items = @(
+  @{ Name = 'Hermes Agent.cmd'; Script = 'open-hermes.ps1'; Title = 'Hermes Agent' }
   @{ Name = 'Рабочий режим.cmd'; Script = 'work-mode.ps1'; Title = 'ALEX - Work Mode' }
   @{ Name = 'Игровой режим.cmd'; Script = 'game-mode.ps1'; Title = 'ALEX - Game Mode' }
   @{ Name = 'Самоулучшение.cmd'; Script = 'self-improve-now.ps1'; Title = 'ALEX - Self Improvement' }
@@ -20,10 +21,14 @@ $items = @(
   @{ Name = 'Версия и отчёт.cmd'; Script = 'version-now.ps1'; Title = 'ALEX - Version Snapshot' }
 )
 
+$ok = 0; $skipped = @()
 foreach ($d in $desktops) {
   foreach ($i in $items) {
     $target = Join-Path $root $i.Script
-    if (-not (Test-Path $target)) { Write-Output "нет $target" -ForegroundColor Red; continue }
+    if (-not (Test-Path $target)) {
+      Write-Host "нет $target" -ForegroundColor Red
+      continue
+    }
     $body = @(
       '@echo off'
       "title $($i.Title)"
@@ -34,7 +39,24 @@ foreach ($d in $desktops) {
       throw "в содержимом $target осталась не-ASCII - cmd.exe его сломает"
     }
     $path = Join-Path $d $i.Name
-    [System.IO.File]::WriteAllLines($path, $body, (New-Object System.Text.ASCIIEncoding))
-    Write-Output "создан: $path"
+    # The public desktop needs elevation. Report and continue instead of aborting,
+    # otherwise nothing after the first failure is created anywhere.
+    try {
+      [System.IO.File]::WriteAllLines($path, $body, (New-Object System.Text.ASCIIEncoding))
+      Write-Output "создан: $path"
+      $ok++
+    } catch {
+      $skipped += $path
+      Write-Host "нужны права администратора: $path" -ForegroundColor Yellow
+    }
   }
 }
+
+Write-Output ''
+Write-Output "создано: $ok"
+if ($skipped.Count) {
+  Write-Output ''
+  Write-Host 'Чтобы создать ярлыки на общем рабочем столе, запусти от администратора:' -ForegroundColor Yellow
+  Write-Host '  powershell -ExecutionPolicy Bypass -File "C:\Users\finni\agent-system\bin\install-shortcuts.ps1"' -ForegroundColor Yellow
+}
+
