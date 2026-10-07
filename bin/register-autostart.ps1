@@ -10,10 +10,13 @@ $root    = 'C:\Users\finni\agent-system'
 $py      = 'C:\Users\finni\AppData\Local\Programs\Python\Python312\python.exe'
 $logDir  = Join-Path $root 'logs'
 
+# Periodic tasks call a wrapper .ps1 by absolute path with no quoting and no
+# shell redirection. Registering an inline `cmd /c "... >> log"` string produced
+# tasks that ran and died with 0x1 without ever creating the log.
 $tasks = @(
   @{
     Name     = 'agent-improve-hourly'
-    Action   = "`"$py`" `"$root\agent\self_improve.py`" 1 >> `"$logDir\improve-hourly.log`" 2>&1"
+    Action   = "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $root\bin\tick-improve.ps1"
     # RepetitionInterval без RepetitionDuration не работает: Windows считает такой
     # триггер однократным и задача срабатывает ровно один раз. Длительность в
     # 10 лет даёт реальный hourly до 2036 года.
@@ -25,23 +28,21 @@ $tasks = @(
   }
   @{
     Name     = 'agent-runtime-startup'
-    Action   = "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$root\bin\start-runtime.ps1`""
+    Action   = "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $root\bin\start-runtime.ps1"
     Trigger  = (New-ScheduledTaskTrigger -AtStartup)
     RunLevel = 'Limited'
     Desc     = 'Поднимает llama-server при старте Windows (рабочий режим)'
   }
   @{
     Name     = 'agent-metrics-daily'
-    Action   = "`"$py`" `"$root\agent\metrics.py`" >> `"$logDir\metrics-daily.log`" 2>&1"
+    Action   = "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $root\bin\tick-metrics.ps1"
     Trigger  = (New-ScheduledTaskTrigger -Daily -At '11:00')
     RunLevel = 'Limited'
     Desc     = 'Сбор метрик и переиндексация RAG раз в сутки'
   }
   @{
     Name     = 'agent-version-daily'
-    Action   = "`"$py`" `"$root\agent\version_agent.py`" snapshot --bump patch --push >> `"$logDir\version-daily.log`" 2>&1"
-    # Повторение задаётся явно вместе с длительностью: без -RepetitionDuration
-    # Windows не считает триггер повторяющимся и задача срабатывает один раз.
+    Action   = "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $root\bin\tick-version.ps1"
     Trigger  = (New-ScheduledTaskTrigger -Daily -At '23:30')
     RunLevel = 'Limited'
     Desc     = 'Ежедневный снимок версии с отчётом и отправкой в GitHub'
@@ -85,7 +86,7 @@ foreach ($t in $tasks) {
     'enable' {
       $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel $t.RunLevel
       Register-ScheduledTask -TaskName $t.Name `
-        -Action (New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c $($t.Action)") `
+        -Action (New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $t.Action) `
         -Trigger $t.Trigger -Principal $principal `
         -Settings (New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
                      -ExecutionTimeLimit (New-TimeSpan -Hours 2) -StartWhenAvailable) `

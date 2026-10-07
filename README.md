@@ -53,6 +53,42 @@ python tests\test_safety.py
 - **Рабочий режим** — сервер + автозапуск + индекс + первый цикл самоулучшения
 - **Игровой режим** — останавливает всё и отдаёт VRAM играм
 
+## Агент версий (GitHub)
+
+Репозиторий системы: **https://github.com/Chegolin123/Ai_Alex** — ветка `main`,
+теги вида `v0.2.1`. Рабочая копия и есть репозиторий: `C:\Users\finni\agent-system`.
+
+Git в системе не установлен, используется портативный из тулчейна Hermes —
+агент обращается к нему по полному пути и не зависит от `PATH`.
+
+```powershell
+python agent\version_agent.py status              # ветка, теги, незакоммиченное, секреты
+python agent\version_agent.py snapshot            # снимок + отчёт + тег
+python agent\version_agent.py snapshot --push     # ...и отправить в GitHub
+python agent\version_agent.py snapshot --bump major
+python agent\version_agent.py push               # отправить без нового снимка
+python agent\version_agent.py history             # теги и коммиты
+python agent\version_agent.py rollback --tag v0.2.0
+python agent\version_agent.py doctor              # проверка утечек секретов
+```
+
+Что делает `snapshot`: переиндексирует RAG, собирает метрики, кладёт отчёт в
+`reports/YYYY-MM-DD_HHMM.md` (состояние LLM, GPU, VRAM, метрики, таблица решений
+самоулучшения), коммитит, обновляет `CHANGELOG.md`, ставит тег.
+
+`rollback` — откат всей системы на тег. Обычные бэкапы в `state/backups/`
+остаются для точечных правок одного файла.
+
+### Секреты
+
+`config.json` с API-ключом в `.gitignore` и **не должен** попадать в репозиторий.
+Ключ читается из него во всех скриптах. `version_agent.py doctor` проверяет, что
+в индексе нет ни одного секрета; при первом снимке это выявило утечку ключа в
+`bin/start-runtime.ps1` и `probe/probe_runtime.py` — история была пересоздана,
+потому что репозиторий ещё не отправлялся.
+
+Ежедневный снимок с отправкой: задача `agent-version-daily` в 23:30.
+
 ## Автозапуск при старте Windows
 
 Зарегистрирован (одним UAC через `bin\setup-admin.ps1`):
@@ -62,6 +98,18 @@ python tests\test_safety.py
 | `agent-runtime-startup` | при старте Windows, поднимает LLM-сервер |
 | `agent-improve-hourly` | раз в час, цикл самоулучшения |
 | `agent-metrics-daily` | раз в сутки в 11:00, метрики и RAG |
+| `agent-version-daily` | раз в сутки в 23:30, снимок версии + push в GitHub |
+
+У повторяющегося триггера обязательно задан `-RepetitionDuration` — без него
+Windows считает триггер однократным, и задача срабатывает ровно один раз. На
+этом почасовой цикл молча не работал.
+
+Периодические задачи вызывают обёртку `bin\tick-*.ps1` одной строкой без кавычек.
+Регистрация inline-команды вида `cmd /c "...python.exe ... >> log"` давала задачи,
+которые запускались и умирали с `0x1`, ни разу не создав лог.
+
+Проверка: `powershell -ExecutionPolicy Bypass -File bin\check-tasks.ps1` — покажет
+триггеры, результат последнего запуска и состояние логов.
 
 Отключить и включить вручную:
 
