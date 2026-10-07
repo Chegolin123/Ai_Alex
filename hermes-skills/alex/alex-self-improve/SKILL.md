@@ -19,8 +19,28 @@ metadata:
 C:\Users\finni\agent-system\bin\alex.cmd improve 1                 # одно изменение за цикл
 C:\Users\finni\agent-system\bin\alex.cmd improve 1 --thinking      # с размышлениями модели вслух
 C:\Users\finni\agent-system\bin\alex.cmd improvements              # что уже пробовали и что вышло
+C:\Users\finni\agent-system\bin\alex.cmd live                      # идёт ли цикл прямо сейчас
+C:\Users\finni\agent-system\bin\alex.cmd watch                     # поток отметок фаз и размышлений
 C:\Users\finni\agent-system\bin\alex.cmd report                   # текущее состояние и метрики
 ```
+
+## Как смотреть идущую работу
+
+Важное ограничение: вывод команды в Hermes возвращается **после завершения** и
+обрезается. Прогресс в реальном времени в окне агента не виден.
+
+Следить надо так:
+
+1. `alex.cmd live` — короткая проверка, идёт ли цикл (поле `running`)
+2. `alex.cmd watch` — поток транскрипта: отметки фаз, затем живые размышления
+3. Транскрипт на диске: `logs/improve-thinking.log`
+
+Когда пользователь просит показать ход работы — не обещай «покажу в окне», а
+запусти цикл и предложи `alex.cmd watch` в отдельном окне.
+
+Размышления (`--thinking`) дороже: модель тратит на них бюджет токенов, и ответ
+иногда не дописывается. Если цикл вернул `no_proposal` или
+`all_proposals_rejected` — причина в `alex.cmd improvements`.
 
 ## Что система уже умеет
 

@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -186,6 +187,61 @@ def cmd_state(a):
     })
 
 
+def cmd_watch(a):
+    """Follow the live transcript of a thinking run.
+
+    Hermes captures terminal output only when the command returns, and truncates
+    it, so ongoing work is not visible in its window. This tails the file the
+    streaming path writes instead.
+    """
+    path = a.file or os.path.join(state.ROOT, "logs", "improve-thinking.log")
+    if not os.path.exists(path):
+        OUT.write(f"транскрипта нет: {path}\n"
+                  f"запусти цикл с --thinking, чтобы он появился\n")
+        return 1
+
+    OUT.write(f"слежу за {path}, Ctrl+C - остановить\n\n")
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        f.seek(0, os.SEEK_END)
+        deadline = time.time() + (a.seconds or 0)
+        while True:
+            chunk = f.readline()
+            if chunk:
+                OUT.write(chunk)
+                OUT.flush()
+                continue
+            if a.follow and time.time() > deadline:
+                OUT.write("\nвремя слежения истекло\n")
+                return 0
+            if not a.follow and time.time() > deadline:
+                return 0
+            time.sleep(0.4)
+
+
+def cmd_status_live(a):
+    """One-line progress of a possibly-running improvement cycle."""
+    rows = state.read_events(since_minutes=a.minutes, limit=500)
+    last_start = None
+    last_end = None
+    for r in rows:
+        if r["kind"] == "self_improve_start":
+            last_start = r
+        if r["kind"] == "self_improve_end":
+            last_end = r
+    log_path = os.path.join(state.ROOT, "logs", "improve-thinking.log")
+    OUT.write(json.dumps({
+        "running": last_start is not None and (last_end is None or
+                                                last_end["ts"] < last_start["ts"]),
+        "last_start": (last_start or {}).get("ts"),
+        "last_end": (last_end or {}).get("ts"),
+        "last_result": (last_end or {}).get("status"),
+        "last_seconds": (last_end or {}).get("seconds"),
+        "transcript_exists": os.path.exists(log_path),
+        "transcript_bytes": os.path.getsize(log_path) if os.path.exists(log_path) else 0,
+    }, ensure_ascii=False, indent=2) + "\n")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(prog="alex", description="Система ALEX - слой команд для Hermes")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -246,6 +302,16 @@ def main():
     p.add_argument("--minutes", type=int, default=60)
     p.add_argument("--limit", type=int, default=200)
     p.set_defaults(fn=cmd_state)
+
+    p = sub.add_parser("watch", help="следить за живым транскриптом размышлений")
+    p.add_argument("--file", help="свой файл вместо logs/improve-thinking.log")
+    p.add_argument("--seconds", type=int, default=0, help="сколько секунд следить (0 - до Ctrl+C)")
+    p.add_argument("--follow", action="store_true", help="следить, пока файл растёт")
+    p.set_defaults(fn=cmd_watch)
+
+    p = sub.add_parser("live", help="идёт ли сейчас цикл самоулучшения")
+    p.add_argument("--minutes", type=int, default=180)
+    p.set_defaults(fn=cmd_status_live)
 
     a = ap.parse_args()
     try:

@@ -269,6 +269,7 @@ def run_cycle(client=None, max_changes=1, verbose=True, show_thinking=False):
     if verbose:
         print("доказательства собраны:", json.dumps(evidence["event_counts"], ensure_ascii=False)[:200])
 
+    loop.note("цикл самоулучшения: считаю базовый уровень, 3 прогона бенчмарка")
     baseline_score, baseline_detail = measure(client)
     if verbose:
         print(f"baseline: {baseline_score:.2f}  прогоны: {baseline_detail.get('runs')}  "
@@ -276,6 +277,7 @@ def run_cycle(client=None, max_changes=1, verbose=True, show_thinking=False):
     state.log_event("self_improve_baseline", score=baseline_score, detail=baseline_detail)
 
     for _ in range(max_changes):
+        loop.note("базовый уровень: %.2f, ищу слабое место" % baseline_score)
         proposal = propose(client, evidence, benchmark=baseline_detail, show_thinking=show_thinking)
         if not proposal:
             result["status"] = "no_proposal"
@@ -291,10 +293,25 @@ def run_cycle(client=None, max_changes=1, verbose=True, show_thinking=False):
         ok, info = apply_change(proposal, client)
         if not ok:
             state.log_event("self_improve_change_failed", component=component, info=str(info)[:300])
+            # A rejected proposal is still work done: the model found a defect and
+            # named a fix, the executor just could not carry it out. Logging it
+            # matters - the ledger is what the next cycle reads to avoid repeating
+            # the same dead end.
+            state.log_improvement(
+                component=component,
+                change=proposal["change_instruction"][:400],
+                reason=proposal["reason"][:400],
+                result="rejected_not_applied",
+                weakness=proposal["weakness"][:300],
+                reject_reason=str(info.get("error"))[:300],
+            )
+            result["rejected"] = result.get("rejected", 0) + 1
+            loop.note("предложение отклонено на стадии правки: %s" % str(info.get("error"))[:120])
             if verbose:
                 print(f"ОТКЛОНЕНО: {info.get('error')}")
             continue
 
+        loop.note("правка применена к %s, проверяю и меряю заново" % component)
         valid, why = validate_component(component)
         if not valid:
             restored = state.restore(backup_path) if backup_path else None
@@ -343,6 +360,7 @@ def run_cycle(client=None, max_changes=1, verbose=True, show_thinking=False):
             state.log_event("self_improve_rollback", component=component, verdict=verdict,
                             backup=backup_path, restored=restored)
 
+        loop.note("вердикт: %s (%.2f -> %.2f)" % (verdict, baseline_score, after_score))
         rec = state.log_improvement(
             component=component,
             change=proposal["change_instruction"][:800],
@@ -376,7 +394,8 @@ def run_cycle(client=None, max_changes=1, verbose=True, show_thinking=False):
                   f"дельта {rec['delta']:+.2f}, порог шума {rec['noise_threshold']:.2f})"
                   f"{'  ОТКАТ' if rolled_back else ''}")
 
-    result["status"] = "completed" if result["changes"] else result["status"]
+    result["status"] = "completed" if result["changes"] else (
+        "all_proposals_rejected" if result.get("rejected") else result["status"])
     result["seconds"] = round(time.time() - started, 1)
     result["final_score"] = baseline_score
     state.log_event("self_improve_end", status=result["status"], seconds=result["seconds"],

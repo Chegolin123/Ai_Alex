@@ -25,6 +25,21 @@ LIMITS = {
 }
 
 MAX_TOOL_CHARS = 3000
+THINKING_LOG = os.path.join(state.ROOT, "logs", "improve-thinking.log")
+
+
+def note(message):
+    """Progress line for the live transcript.
+
+    Without this the file stays empty for the whole benchmark phase - the model
+    only starts thinking after measuring - and `alex watch` looks broken.
+    """
+    try:
+        os.makedirs(os.path.dirname(THINKING_LOG), exist_ok=True)
+        with open(THINKING_LOG, "a", encoding="utf-8") as f:
+            f.write(f"[{time.strftime('%H:%M:%S')}] {message}\n")
+    except OSError:
+        pass
 
 
 def load_skill(name):
@@ -58,35 +73,58 @@ def ask_json(client, skill_name, prompt, max_tokens=1200, temperature=0.3, tools
     schema = schemas.for_skill(skill_name)
 
     if show_thinking:
-        kw = {"max_tokens": max(2400, max_tokens), "temperature": temperature}
-        if schema:
-            kw["json_schema"] = schema
-            kw["schema_name"] = skill_name
-        reasoning, answer = [], []
+        # Two turns on purpose. Measured on this model: with reasoning enabled a
+        # single turn spends the whole budget thinking and returns zero answer
+        # characters (24263 chars of reasoning, answer_chars=0, ending mid-sentence
+        # at "Let me propose a concrete fix"). Raising max_tokens only buys more
+        # thinking. So: turn 1 streams the reasoning for the human, turn 2 asks for
+        # the JSON with reasoning off, which is the configuration that parses.
+        loop_note = THINKING_LOG
+        os.makedirs(os.path.dirname(loop_note), exist_ok=True)
         try:
-            for kind, delta in client.stream(messages, **kw):
-                (reasoning if kind == "reasoning" else answer).append(delta)
-                sys.stdout.write(delta)
-                sys.stdout.flush()
+            log = open(loop_note, "a", encoding="utf-8")
+            log.write(f"\n\n===== РАЗМЫШЛЕНИЕ: {skill_name}  "
+                      f"{time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
+        except OSError:
+            log = None
+
+        think_kw = {"max_tokens": max(2000, max_tokens * 2), "temperature": temperature}
+        try:
+            for kind, delta in client.stream(messages, **think_kw):
+                if kind == "reasoning":
+                    if log:
+                        log.write(delta)
+                        log.flush()
+                    sys.stdout.write(delta)
+                    sys.stdout.flush()
         except llm.LlmError as e:
+            if log:
+                log.write(f"\n[ОШИБКА: {e}]\n")
+                log.close()
             state.log_event("llm_error", skill=skill_name, stage="stream", error=str(e)[:300])
             return None, {"error": str(e)}
         print()
-        dt = round(time.time() - t0, 1)
-        raw_text = "".join(answer)
-        r_chars = sum(len(x) for x in reasoning)
-        parsed = llm.repair_json(raw_text)
-        if parsed is None:
-            state.log_event("json_parse_failed", skill=skill_name, stage="streamed",
-                            preview=raw_text[:300], reasoning_chars=r_chars)
-            return None, {"skill": skill_name, "seconds": dt, "parse_failed": True,
-                          "reasoning_chars": r_chars}
-        state.log_event("llm_ok", skill=skill_name, seconds=dt, streamed=True,
-                        reasoning_chars=r_chars, schema_enforced=bool(schema),
-                        temp_c=snap.get("temp_c"))
-        return parsed, {"skill": skill_name, "seconds": dt, "streamed": True,
-                        "reasoning_chars": r_chars, "schema_enforced": bool(schema),
-                        "temp_c": snap.get("temp_c"), "finish_reason": None}
+        if log:
+            log.write("\n----- конец размышлений -----\n")
+            log.close()
+
+        answer_kw = {"max_tokens": max_tokens, "temperature": temperature,
+                     "reasoning_effort": "none"}
+        if schema:
+            answer_kw["json_schema"] = schema
+            answer_kw["schema_name"] = skill_name
+        t0 = time.time()
+        try:
+            res = client.complete(messages, **answer_kw)
+        except llm.LlmError as e:
+            state.log_event("llm_error", skill=skill_name, stage="answer_after_think",
+                            error=str(e)[:300])
+            return None, {"error": str(e)}
+        parsed, meta = _finish(res, skill_name, snap, waited, max_tokens,
+                               schema_enforced=bool(schema))
+        if meta is not None:
+            meta["showed_thinking"] = True
+        return parsed, meta
 
     if not tools_enabled:
         kw = {"max_tokens": max_tokens, "temperature": temperature, "reasoning_effort": "none"}
