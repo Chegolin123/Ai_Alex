@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-07T12:52:26+00:00",
+  "updated_at": "2026-10-07T12:57:08+00:00",
   "window_minutes": 1440,
   "counters": {
     "cycles": 24,
@@ -20,25 +20,25 @@
     "json_reliability": 0.963
   },
   "thermal_metrics": {
-    "avg_gpu_temp": 57.4,
+    "avg_gpu_temp": 57.3,
     "max_gpu_temp": 65.0,
     "throttle_events": 0,
     "thermal_rest_count": 0,
     "current": {
       "available": true,
-      "temp_c": 48.0,
-      "used_mb": 7841,
+      "temp_c": 44.0,
+      "used_mb": 7832,
       "total_mb": 8192,
-      "free_mb": 351,
-      "util_pct": 11.0,
-      "power_w": 13.03,
+      "free_mb": 360,
+      "util_pct": 10.0,
+      "power_w": 12.87,
       "status": "ok"
     }
   },
   "rag": {
-    "chunks": 268,
-    "files": 50,
+    "chunks": 282,
+    "files": 51,
     "db_bytes": 614400
   },
-  "previous_updated_at": "2026-10-07T12:32:03+00:00"
+  "previous_updated_at": "2026-10-07T12:52:26+00:00"
 }

@@ -242,6 +242,16 @@ def cmd_status_live(a):
     return 0
 
 
+def cmd_progress(a):
+    """Honest answer to "is it actually getting better on its own"."""
+    from agent import progress
+    result = progress.verdict()
+    if a.json:
+        emit(result)
+        return 0 if "УЛУЧШАЕТСЯ" in result["verdict"] else 1
+    return progress.render(result)
+
+
 def main():
     ap = argparse.ArgumentParser(prog="alex", description="Система ALEX - слой команд для Hermes")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -312,6 +322,10 @@ def main():
     p = sub.add_parser("live", help="идёт ли сейчас цикл самоулучшения")
     p.add_argument("--minutes", type=int, default=180)
     p.set_defaults(fn=cmd_status_live)
+
+    p = sub.add_parser("progress", help="улучшает ли система сама себя: честный вердикт")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_progress)
 
     a = ap.parse_args()
     try:
