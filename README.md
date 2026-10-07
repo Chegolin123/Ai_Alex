@@ -89,6 +89,36 @@ python agent\version_agent.py doctor              # проверка утече�
 
 Ежедневный снимок с отправкой: задача `agent-version-daily` в 23:30.
 
+## Работа в Hermes CLI
+
+Hermes — оркестратор. Он планирует, работает своими инструментами
+(`read_file`, `write_file`, `patch`, `search_files`, `terminal`) и видит всё в
+CLI. Python — слой инструментов: термоконтроль, защита, RAG, циклы, версии.
+
+```
+C:\Users\finni\agent-system\bin\alex.cmd run "<команда>"   # единственный путь для shell
+C:\Users\finni\agent-system\bin\alex.cmd thermal          # GPU, VRAM, питание
+C:\Users\finni\agent-system\bin\alex.cmd gate             # 1, если горячо
+C:\Users\finni\agent-system\bin\alex.cmd rag "<запрос>"    # поиск по системе
+C:\Users\finni\agent-system\bin\alex.cmd cycle "<цель>"    # цикл агента
+C:\Users\finni\agent-system\bin\alex.cmd improve [--thinking]
+C:\Users\finni\agent-system\bin\alex.cmd improvements     # история решений
+C:\Users\finni\agent-system\bin\alex.cmd report            # сводка
+C:\Users\finni\agent-system\bin\alex.cmd version [--snapshot]
+C:\Users\finni\agent-system\bin\alex.cmd state             # срез в JSON
+```
+
+Коды возврата `run`: `0` успех, `3` заблокировано защитой, `4` отменено
+термозащитой.
+
+Skills лежат в `hermes-skills/alex/*/SKILL.md` и подключены к Hermes через
+`skills.external_dirs` в его `config.yaml`. Видны как категория `alex`, статус
+`enabled`:
+
+- `alex-orchestrator` — порядок работы: разведка → план → выполнение → проверка
+- `alex-self-improve` — цикл улучшений и его измеренные ограничения
+- `alex-system` — железо, сервер, RAG, версии, расписание
+
 ## Автозапуск при старте Windows
 
 Зарегистрирован (одним UAC через `bin\setup-admin.ps1`):
