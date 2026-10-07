@@ -14,6 +14,8 @@ $desktops = @(
 $items = @(
   @{ Name = 'Рабочий режим.cmd'; Script = 'work-mode.ps1'; Title = 'ALEX - Work Mode' }
   @{ Name = 'Игровой режим.cmd'; Script = 'game-mode.ps1'; Title = 'ALEX - Game Mode' }
+  @{ Name = 'Самоулучшение.cmd'; Script = 'self-improve-now.ps1'; Title = 'ALEX - Self Improvement' }
+  @{ Name = 'Версия и отчёт.cmd'; Script = 'version-now.ps1'; Title = 'ALEX - Version Snapshot' }
 )
 
 foreach ($d in $desktops) {

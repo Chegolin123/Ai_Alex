@@ -1,44 +1,44 @@
 {
-  "updated_at": "2026-10-07T11:19:39+00:00",
+  "updated_at": "2026-10-07T11:23:53+00:00",
   "window_minutes": 1440,
   "counters": {
-    "cycles": 88,
-    "llm_ok": 245,
+    "cycles": 94,
+    "llm_ok": 259,
     "llm_error": 0,
     "json_parse_failed": 0,
     "tool_call_unknown": 0,
-    "shell_exec": 65,
+    "shell_exec": 70,
     "shell_blocked_by_safety": 0
   },
   "task_metrics": {
-    "success_rate": 0.864,
-    "avg_attempts_per_stage": 1.24,
-    "stages_seen": 42,
-    "stage_retry_rate": 0.19,
-    "avg_time_per_cycle_sec": 11.8,
-    "avg_llm_turn_sec": 50.1,
+    "success_rate": 0.872,
+    "avg_attempts_per_stage": 1.21,
+    "stages_seen": 48,
+    "stage_retry_rate": 0.167,
+    "avg_time_per_cycle_sec": 11.7,
+    "avg_llm_turn_sec": 49.5,
     "json_reliability": 1.0
   },
   "thermal_metrics": {
-    "avg_gpu_temp": 60.0,
+    "avg_gpu_temp": 59.9,
     "max_gpu_temp": 65.0,
     "throttle_events": 0,
     "thermal_rest_count": 0,
     "current": {
       "available": true,
-      "temp_c": 42.0,
-      "used_mb": 7855,
+      "temp_c": 50.0,
+      "used_mb": 7870,
       "total_mb": 8192,
-      "free_mb": 337,
+      "free_mb": 322,
       "util_pct": 9.0,
-      "power_w": 11.71,
+      "power_w": 16.1,
       "status": "ok"
     }
   },
   "rag": {
-    "chunks": 225,
-    "files": 44,
+    "chunks": 231,
+    "files": 46,
     "db_bytes": 577536
   },
-  "previous_updated_at": "2026-10-07T11:18:43+00:00"
+  "previous_updated_at": "2026-10-07T11:19:39+00:00"
 }
