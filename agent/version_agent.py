@@ -96,10 +96,21 @@ class Git:
         head = self.out("rev-parse", "--short", "HEAD", check=False)
         tags = self.out("tag", "--list").splitlines()
         unpushed = self.run("log", "--oneline", "@{u}..HEAD", check=False)
+        # Porcelain v1: two status chars, a space, then the path. Slicing by a
+        # fixed offset ate the first letter of untracked names ("state/..." became
+        # "tate/..."), and renames carry "old -> new".
+        dirty_files = []
+        for line in dirty.splitlines():
+            if not line.strip():
+                continue
+            path = line[2:].strip() if len(line) > 3 else ""
+            if " -> " in path:
+                path = path.split(" -> ", 1)[1]
+            dirty_files.append(path.strip('"'))
         return {
             "branch": branch,
             "head": head or "(нет коммитов)",
-            "dirty_files": [l[3:] for l in dirty.splitlines() if l.strip()],
+            "dirty_files": dirty_files,
             "tags": tags,
             "latest_tag": tags[-1] if tags else None,
             "unpushed": (unpushed.stdout or "").strip().splitlines() if unpushed.returncode == 0 else None,
